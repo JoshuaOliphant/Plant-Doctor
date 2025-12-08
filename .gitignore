@@ -35,3 +35,6 @@ Thumbs.db
 # Testing
 test_images/
 *.log
+
+# Evaluation datasets (large, downloaded separately)
+data/PlantDoc-Dataset/
