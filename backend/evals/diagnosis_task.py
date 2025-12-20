@@ -65,72 +65,44 @@ Example 5 - Potato with late-stage blight:
 - Output ONLY the JSON, no additional text"""
 
 
-# GEPA-optimized prompt - evolved through reflective mutation for higher accuracy
-OPTIMIZED_SYSTEM_PROMPT = """You are an AI Plant Disease Classifier specialized in diagnosing plant diseases through precise image analysis.
+# GEPA-optimized prompt - evolved with pattern-based feedback
+OPTIMIZED_SYSTEM_PROMPT = """You are a plant disease classifier. Analyze plant images and identify the species and any visible disease.
 
-TASK OBJECTIVES:
-- Accurately identify plant species from input images
-- Detect and classify specific plant diseases with high precision
-- Provide a confident and accurate diagnostic assessment
-
-DOMAIN-SPECIFIC KNOWLEDGE:
-1. Common Plant Disease Patterns:
-   - Apple Trees Specific Diseases:
-     * Apple Scab Leaf: Characterized by dark, scaly lesions on leaves
-     * Apple Cedar Rust: Orange-brown spots, often with distinct patterns
-     * Distinguishing between similar diseases critical for accurate diagnosis
-
-2. Diagnostic Criteria:
-   - Examine leaf surface for:
-     * Color variations
-     * Spot patterns
-     * Texture changes
-     * Lesion characteristics
-     * Discoloration edges and types
-
-3. Confidence Assessment Factors:
-   - Visual symptom clarity
-   - Distinctiveness of disease markers
-   - Comprehensiveness of observable symptoms
-
-INPUT FORMAT:
-- High-resolution image of plant leaf/affected plant part
-- Optional: Suggested plant species name
-
-OUTPUT REQUIREMENTS:
-Respond ONLY with JSON in this structured format:
+Respond with ONLY valid JSON in this exact format:
 {
-  "species": "Exact plant species name",
-  "disease": "Specific disease name (Plant Species + Disease Type)",
+  "species": "Plant name",
+  "disease": "Specific disease name or 'Healthy'",
   "confidence": 0.0-1.0
 }
 
-CRITICAL GUIDELINES:
-1. Disease Naming Protocol:
-   - ALWAYS prefix disease name with plant species
-   - Use most specific disease identification possible
-   - Prioritize accuracy over generalization
+Guidelines:
 
-2. Confidence Scoring Methodology:
-   - Decimal scale (0.0-1.0)
-   - Score based on:
-     * Symptom clarity
-     * Matching against known disease patterns
-     * Comprehensiveness of observable indicators
+RESPONSE FORMAT:
+- Output ONLY the JSON, no additional text
+- Use valid JSON syntax
 
-3. Health Assessment Principles:
-   - Default to "Healthy" if NO definitive disease markers
-   - Distinguish between natural variation and pathological changes
+DISEASE IDENTIFICATION:
+- Be specific and include the plant species in disease names (e.g., "Apple scab" not just "Scab")
+- Use "Healthy" only when no disease symptoms are visible
+- Do NOT classify viral symptoms (yellowing, mottling, curling, distortion) as 'Healthy'
 
-4. Diagnostic Strategy:
-   - Holistic image examination
-   - Cross-reference against comprehensive plant disease database
-   - Consider subtle, nuanced visual indicators
+SYMPTOM DIFFERENTIATION:
+- Bacterial diseases: Look for water-soaked lesions, halos around spots, translucent appearance
+- Fungal diseases: Look for concentric rings, defined/sharp borders, powdery coating, or fuzzy growth
+- Gray leaf spot: Rectangular lesions positioned between leaf veins (distinct from blight or rust patterns)
+- Blight: Shows tissue death and rapid spread; mold shows fuzzy growth
+- Rust: Orange/brown pustules, often on leaf undersides
+- Scab: Dark, raised, roughened lesions with irregular borders
 
-STRICT OUTPUT CONSTRAINTS:
-- JSON format ONLY
-- No supplementary text
-- Precise, unambiguous diagnostic representation"""
+VERIFICATION:
+- Verify the plant species BEFORE assigning disease names - never mix diseases from different plant species
+- Consider both houseplants AND agricultural crops equally
+- Match disease to the correct plant species
+
+CONFIDENCE:
+- Set confidence based on symptom clarity and certainty of identification
+- Lower confidence (0.5-0.7) when symptoms are ambiguous or multiple diseases are possible
+- Higher confidence (0.8-1.0) when symptoms are clear and definitive"""
 
 
 def parse_classification_response(text: str) -> dict:
