@@ -2,13 +2,25 @@
 # ABOUTME: Supports running individual models or comparing multiple models.
 
 import argparse
+import asyncio
+import json
 import sys
+from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 from .config import ClaudeModel, EvalSettings
 from .runner import run_evaluation, print_report, save_results, calculate_metrics
-from .dataset_loader import get_test_case_count, get_disease_classes
+from .dataset_loader import get_test_case_count, get_disease_classes, iter_test_cases
+from .multi_model_classifier import (
+    ModelProvider,
+    classify_image,
+    check_disease_match,
+)
+from .prompts import get_prompt
 
 
 console = Console()
@@ -44,6 +56,156 @@ def run_optimize(args):
     console.print(f"  Optimized accuracy: {result.optimized_accuracy:.1%}")
     console.print(f"  Improvement: {result.improvement:+.1%}")
     console.print(f"\nResults saved to: {settings.results_path / 'gepa_optimization.json'}")
+
+
+async def run_multi_model_eval(args):
+    """Run evaluation across multiple models and prompt types."""
+    settings = EvalSettings()
+
+    # Parse models to evaluate
+    model_map = {
+        "claude-haiku": ModelProvider.CLAUDE_HAIKU,
+        "claude-sonnet": ModelProvider.CLAUDE_SONNET,
+        "gpt-4o": ModelProvider.GPT_4O,
+        "gpt-4o-mini": ModelProvider.GPT_4O_MINI,
+        "gpt-4.1": ModelProvider.GPT_4_1,
+        "gpt-4.1-mini": ModelProvider.GPT_4_1_MINI,
+        "gpt-4.1-nano": ModelProvider.GPT_4_1_NANO,
+        "gemini-2-flash": ModelProvider.GEMINI_2_FLASH,
+        "gemini-2-pro": ModelProvider.GEMINI_2_PRO,
+        "gemini-1.5-flash": ModelProvider.GEMINI_1_5_FLASH,
+        "gemini-1.5-pro": ModelProvider.GEMINI_1_5_PRO,
+    }
+
+    models_to_run = []
+    for model_name in args.models:
+        if model_name in model_map:
+            models_to_run.append(model_map[model_name])
+        else:
+            console.print(f"[yellow]Warning: Unknown model '{model_name}', skipping[/yellow]")
+
+    if not models_to_run:
+        console.print("[red]No valid models specified[/red]")
+        return
+
+    prompt_types = args.prompts.split(",") if args.prompts else ["baseline"]
+
+    # Load test cases
+    cases = list(iter_test_cases(settings))
+    if args.max_images:
+        cases = cases[:args.max_images]
+
+    console.print("\n[bold]Multi-Model Plant Disease Classification Evaluation[/bold]")
+    console.print(f"Models: {', '.join(m.name for m in models_to_run)}")
+    console.print(f"Prompt types: {', '.join(prompt_types)}")
+    console.print(f"Test cases: {len(cases)}")
+
+    if args.dry_run:
+        console.print("\n[yellow]Dry run - would evaluate with above settings[/yellow]")
+        return
+
+    # Run evaluations
+    all_results = {}
+
+    for model in models_to_run:
+        for prompt_type in prompt_types:
+            key = f"{model.name}_{prompt_type}"
+            results = []
+            correct = 0
+            errors = 0
+            total_cost = 0.0
+            total_time = 0
+
+            console.print(f"\n[cyan]Evaluating {model.name} with {prompt_type} prompt...[/cyan]")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                console=console,
+            ) as progress:
+                task = progress.add_task(f"Processing...", total=len(cases))
+
+                for case in cases:
+                    result = await classify_image(case, model, prompt_type)
+                    results.append(result)
+
+                    if result.is_correct:
+                        correct += 1
+                    if result.error:
+                        errors += 1
+                    total_cost += result.cost_cents
+                    total_time += result.processing_time_ms
+
+                    accuracy = (correct / len(results)) * 100
+                    progress.update(
+                        task,
+                        advance=1,
+                        description=f"Accuracy: {accuracy:.1f}%"
+                    )
+
+            all_results[key] = {
+                "model": model.name,
+                "prompt_type": prompt_type,
+                "results": results,
+                "accuracy": (correct / len(results)) * 100 if results else 0,
+                "correct": correct,
+                "errors": errors,
+                "total": len(results),
+                "total_cost_cents": total_cost,
+                "avg_time_ms": total_time / len(results) if results else 0,
+            }
+
+    # Print comparison table
+    console.print("\n" + "=" * 80)
+    console.print("[bold]Multi-Model Comparison Results[/bold]")
+    console.print("=" * 80)
+
+    comparison = Table(title="Model Comparison")
+    comparison.add_column("Model", style="cyan")
+    comparison.add_column("Prompt", style="magenta")
+    comparison.add_column("Accuracy", style="green")
+    comparison.add_column("Correct", style="white")
+    comparison.add_column("Cost", style="yellow")
+    comparison.add_column("Avg Time", style="dim")
+
+    for key, metrics in sorted(all_results.items(), key=lambda x: -x[1]["accuracy"]):
+        comparison.add_row(
+            metrics["model"],
+            metrics["prompt_type"],
+            f"{metrics['accuracy']:.1f}%",
+            f"{metrics['correct']}/{metrics['total']}",
+            f"${metrics['total_cost_cents'] / 100:.4f}",
+            f"{metrics['avg_time_ms']:.0f}ms",
+        )
+
+    console.print(comparison)
+
+    # Save results
+    if args.save:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = settings.results_path / f"multi_model_comparison_{timestamp}.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Convert results to serializable format
+        output_data = {}
+        for key, metrics in all_results.items():
+            output_data[key] = {
+                "model": metrics["model"],
+                "prompt_type": metrics["prompt_type"],
+                "accuracy": metrics["accuracy"],
+                "correct": metrics["correct"],
+                "errors": metrics["errors"],
+                "total": metrics["total"],
+                "total_cost_cents": metrics["total_cost_cents"],
+                "avg_time_ms": metrics["avg_time_ms"],
+            }
+
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2)
+
+        console.print(f"\nResults saved to: {output_path}")
 
 
 def run_optimize_diagnosis(args):
@@ -173,6 +335,45 @@ def main():
         help="Show what would be run without executing"
     )
 
+    # Multi-model comparison subcommand
+    multi_parser = subparsers.add_parser(
+        "compare",
+        help="Compare multiple models and prompts"
+    )
+    multi_parser.add_argument(
+        "--models",
+        nargs="+",
+        default=["claude-sonnet", "gpt-4o", "gemini-2-flash"],
+        help="Models to compare (default: claude-sonnet gpt-4o gemini-2-flash). "
+             "Options: claude-haiku, claude-sonnet, gpt-4o, gpt-4o-mini, "
+             "gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gemini-2-flash, gemini-2-pro, "
+             "gemini-1.5-flash, gemini-1.5-pro"
+    )
+    multi_parser.add_argument(
+        "--prompts",
+        type=str,
+        default="baseline,hybrid,cot",
+        help="Comma-separated prompt types to test (default: baseline,hybrid,cot). "
+             "Options: baseline, hybrid, cot, structured"
+    )
+    multi_parser.add_argument(
+        "--max-images",
+        type=int,
+        default=50,
+        help="Maximum images to evaluate per model/prompt combo (default: 50)"
+    )
+    multi_parser.add_argument(
+        "--save",
+        action="store_true",
+        default=True,
+        help="Save results to JSON file (default: true)"
+    )
+    multi_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be evaluated without running"
+    )
+
     args = parser.parse_args()
 
     # Handle optimize command
@@ -183,6 +384,11 @@ def main():
     # Handle optimize-diagnosis command
     if args.command == "optimize-diagnosis":
         run_optimize_diagnosis(args)
+        return
+
+    # Handle compare command (multi-model)
+    if args.command == "compare":
+        asyncio.run(run_multi_model_eval(args))
         return
 
     # Default to eval if no command or eval command

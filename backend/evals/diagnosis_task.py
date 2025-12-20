@@ -9,6 +9,7 @@ import anthropic
 
 from .config import ClaudeModel, MODEL_PRICING, EvalCase, EvalResult
 from .dataset_loader import load_image_as_base64
+from .prompts import BASELINE_PROMPT, HYBRID_PROMPT, DISEASE_SYNONYMS, DISEASE_TERMS
 
 
 # Few-shot prompt for classification eval - teaches format without constraining to dataset
@@ -209,6 +210,7 @@ def check_disease_match(predicted: str, expected: str) -> bool:
     """Check if predicted disease matches expected label.
 
     Uses fuzzy matching since Claude may phrase things differently.
+    Uses expanded synonym mappings from prompts.py for comprehensive matching.
     """
     if not predicted:
         return False
@@ -220,17 +222,8 @@ def check_disease_match(predicted: str, expected: str) -> bool:
     if pred_lower == exp_lower:
         return True
 
-    # Synonym mappings - different names for same disease
-    synonyms = {
-        "yellow virus": ["yellow leaf curl", "tylcv", "leaf curl virus"],
-        "leaf curl virus": ["yellow virus", "tylcv", "yellow leaf curl"],
-        "bacterial spot": ["bacterial speck"],  # Close enough for tomato
-        "mold": ["leaf mold", "mould"],
-        "gray leaf spot": ["grey leaf spot", "gray spot"],
-    }
-
-    # Check synonym matches
-    for canonical, alternatives in synonyms.items():
+    # Check synonym matches using expanded DISEASE_SYNONYMS from prompts.py
+    for canonical, alternatives in DISEASE_SYNONYMS.items():
         if canonical in exp_lower:
             for alt in alternatives:
                 if alt in pred_lower:
@@ -240,23 +233,19 @@ def check_disease_match(predicted: str, expected: str) -> bool:
                 if alt in exp_lower:
                     return True
 
-    # Check if key disease terms match
-    disease_terms = [
-        "scab", "rust", "blight", "bacterial spot", "mosaic virus",
-        "yellow virus", "mold", "septoria", "powdery mildew", "black rot",
-        "gray leaf spot", "healthy", "leaf spot"
-    ]
-
-    for term in disease_terms:
+    # Check if key disease terms match using DISEASE_TERMS from prompts.py
+    for term in DISEASE_TERMS:
         if term in pred_lower and term in exp_lower:
             return True
 
     # Check if "healthy" matches healthy leaf classes
     if "healthy" in pred_lower:
         # Classes like "Apple leaf", "Tomato leaf" without disease = healthy
-        if "leaf" in exp_lower and not any(
-            d in exp_lower for d in ["blight", "spot", "rust", "scab", "virus", "mold", "rot", "mildew"]
-        ):
+        disease_indicators = [
+            "blight", "spot", "rust", "scab", "virus", "mold",
+            "rot", "mildew", "mosaic", "curl", "wilt", "canker"
+        ]
+        if "leaf" in exp_lower and not any(d in exp_lower for d in disease_indicators):
             return True
 
     # Check for early/late blight distinction

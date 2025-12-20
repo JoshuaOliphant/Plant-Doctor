@@ -13,6 +13,8 @@ dependencies = [
     "uvicorn>=0.38.0",
     "pydantic-evals>=1.27.0",
     "dspy>=3.0.4",
+    "pydantic-ai>=1.37.0",
+    "pydantic-ai-slim[google,openai]>=1.37.0",
 ]
 
 [project.scripts]
