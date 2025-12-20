@@ -12,7 +12,7 @@ from gepa import optimize, GEPAAdapter, GEPAResult, EvaluationBatch
 
 from .config import ClaudeModel, EvalSettings, EvalCase, MODEL_PRICING
 from .dataset_loader import iter_test_cases, load_image_as_base64
-from .diagnosis_task import check_disease_match
+from .diagnosis_task import check_disease_match, analyze_failure_pattern
 
 
 @dataclass
@@ -127,6 +127,9 @@ class PlantDocAdapter(GEPAAdapter[PlantDocInstance, dict, ClassificationOutput])
         This method extracts information from failed predictions to help
         GEPA understand what went wrong and how to improve the prompt.
 
+        Uses pattern-based feedback to help GEPA learn generalizable improvements
+        rather than memorizing specific examples.
+
         Returns a dict mapping component name to list of reflective examples.
         """
         result = {}
@@ -141,17 +144,32 @@ class PlantDocAdapter(GEPAAdapter[PlantDocInstance, dict, ClassificationOutput])
 
             for i, (trajectory, output, score) in enumerate(zip(trajectories, outputs, scores)):
                 if score < 1.0:
-                    # This is a failure case - include it for reflection
+                    # This is a failure case - analyze the pattern
+                    predicted = trajectory.get("predicted", "")
+                    expected = trajectory.get("expected", "Unknown")
+
+                    # Get pattern-based feedback instead of just "expected X got Y"
+                    pattern_feedback = analyze_failure_pattern(predicted, expected)
+
                     reflective_examples.append({
                         "Inputs": {
-                            "plant_species": trajectory.get("expected", "Unknown").split()[0],
+                            "plant_species": expected.split()[0] if expected else "Unknown",
                             "image": "[plant leaf image]"
                         },
                         "Generated Outputs": {
-                            "predicted_disease": trajectory.get("predicted", "None"),
+                            "predicted_disease": predicted or "None",
                             "confidence": str(output.confidence) if output.confidence else "N/A"
                         },
-                        "Feedback": f"Expected: {trajectory.get('expected', 'Unknown')}. {trajectory.get('feedback', '')}"
+                        "Failure Pattern": pattern_feedback,
+                        "Constraints": """
+IMPORTANT - Do not overfit to specific diseases. Instead, learn these GENERAL PATTERNS:
+1. Viral symptoms (yellowing, mottling, curling) should NOT be classified as 'Healthy'
+2. Distinguish bacterial (water-soaked, halos) from fungal (concentric rings, defined borders)
+3. Verify plant species before applying disease name - don't mix species
+4. Gray leaf spot has rectangular lesions between veins, distinct from blight or rust
+5. Mold shows fuzzy growth; blight shows tissue death
+6. The prompt should work for BOTH houseplants AND agricultural crops
+"""
                     })
 
             result["system_prompt"] = reflective_examples

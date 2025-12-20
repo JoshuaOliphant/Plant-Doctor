@@ -13,6 +13,7 @@ from gepa import optimize, GEPAAdapter, GEPAResult, EvaluationBatch
 
 from .config import ClaudeModel, EvalSettings, EvalCase, MODEL_PRICING
 from .dataset_loader import iter_test_cases, load_image_as_base64
+from .diagnosis_task import analyze_failure_pattern
 
 
 @dataclass
@@ -189,6 +190,9 @@ class DiagnosisAdapter(GEPAAdapter[DiagnosisInstance, dict, DiagnosisOutput]):
         Extracts information from low-scoring diagnoses to help GEPA
         understand what went wrong and how to improve the prompt.
 
+        Uses pattern-based feedback to help GEPA learn generalizable improvements
+        rather than memorizing specific examples.
+
         Returns a dict mapping component name to list of reflective examples.
         """
         result = {}
@@ -203,18 +207,37 @@ class DiagnosisAdapter(GEPAAdapter[DiagnosisInstance, dict, DiagnosisOutput]):
             for trajectory, output, score in zip(trajectories, outputs, scores):
                 # Include examples that scored below perfect
                 if score < 0.9:
+                    # Extract predicted disease from issues if available
+                    issues = trajectory.get("issues", [])
+                    predicted_disease = issues[0].get("name", "") if issues else ""
+                    expected_disease = trajectory.get("expected_disease", "Unknown")
+
+                    # Get pattern-based feedback
+                    pattern_feedback = analyze_failure_pattern(predicted_disease, expected_disease)
+
                     reflective_examples.append({
                         "Inputs": {
                             "plant_species": trajectory.get("expected_species", "Unknown"),
-                            "disease": trajectory.get("expected_disease", "Unknown"),
+                            "disease": expected_disease,
                             "image": "[plant disease image]"
                         },
                         "Generated Outputs": {
                             "species_guess": str(trajectory.get("species_guess", {})),
-                            "issues": str(trajectory.get("issues", [])),
+                            "issues": str(issues),
                             "explanation": output.explanation or "N/A"
                         },
-                        "Feedback": f"Score: {score:.2f}. {trajectory.get('feedback', '')}"
+                        "Failure Pattern": pattern_feedback,
+                        "Score": f"{score:.2f}",
+                        "Constraints": """
+IMPORTANT CONSTRAINTS - The optimized prompt must:
+1. Work for BOTH houseplants (pothos, monstera, fiddle leaf fig) AND agricultural crops
+2. Prioritize common houseplant issues: overwatering, underwatering, low light, humidity
+3. Not use agricultural-specific language like "apply fungicide spray" for houseplants
+4. Recognize viral symptoms (yellowing, mottling, curling) - don't call them "healthy"
+5. Distinguish bacterial (water-soaked, halos) from fungal (rings, defined borders)
+6. Provide home-appropriate treatment advice for houseplants
+7. Keep friendly, accessible language - avoid overly technical jargon
+"""
                     })
 
             result["system_prompt"] = reflective_examples

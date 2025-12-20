@@ -248,6 +248,26 @@ def check_disease_match(predicted: str, expected: str) -> bool:
     if pred_lower == exp_lower:
         return True
 
+    # Synonym mappings - different names for same disease
+    synonyms = {
+        "yellow virus": ["yellow leaf curl", "tylcv", "leaf curl virus"],
+        "leaf curl virus": ["yellow virus", "tylcv", "yellow leaf curl"],
+        "bacterial spot": ["bacterial speck"],  # Close enough for tomato
+        "mold": ["leaf mold", "mould"],
+        "gray leaf spot": ["grey leaf spot", "gray spot"],
+    }
+
+    # Check synonym matches
+    for canonical, alternatives in synonyms.items():
+        if canonical in exp_lower:
+            for alt in alternatives:
+                if alt in pred_lower:
+                    return True
+        if canonical in pred_lower:
+            for alt in alternatives:
+                if alt in exp_lower:
+                    return True
+
     # Check if key disease terms match
     disease_terms = [
         "scab", "rust", "blight", "bacterial spot", "mosaic virus",
@@ -274,3 +294,50 @@ def check_disease_match(predicted: str, expected: str) -> bool:
         return True
 
     return False
+
+
+def analyze_failure_pattern(predicted: str, expected: str) -> str:
+    """Analyze why a prediction failed and return structured feedback for GEPA.
+
+    Returns pattern-based feedback that helps GEPA learn generalizable improvements.
+    """
+    if not predicted:
+        return "NO_PREDICTION: Model failed to produce a disease classification"
+
+    pred_lower = predicted.lower()
+    exp_lower = expected.lower()
+
+    # Pattern 1: Viral symptoms missed (called healthy)
+    if "healthy" in pred_lower and "virus" in exp_lower:
+        return "VIRAL_MISSED: Yellow mottling, leaf curling, and mosaic patterns indicate viral infection, not healthy plant. Viral symptoms are often subtle - look for uneven yellowing, leaf distortion, and stunted growth."
+
+    # Pattern 2: Bacterial vs fungal confusion
+    if "bacterial" in exp_lower and ("blight" in pred_lower or "fungal" in pred_lower):
+        return "BACTERIAL_VS_FUNGAL: Bacterial spots have water-soaked margins and may show yellow halos. Fungal spots often have concentric rings or defined borders. Look for bacterial ooze in humid conditions."
+
+    # Pattern 3: Wrong species attribution
+    if any(crop in pred_lower for crop in ["potato", "coffee", "wheat", "citrus"]) and \
+       any(crop in exp_lower for crop in ["tomato", "corn", "pepper", "bell"]):
+        return "SPECIES_CONFUSION: Verify the plant species before diagnosing. Similar symptoms can occur across species, but the disease name should match the actual plant in the image."
+
+    # Pattern 4: Similar diseases on same crop confused
+    if "tomato" in exp_lower and "tomato" in pred_lower:
+        if "early blight" in pred_lower and "late blight" in exp_lower:
+            return "BLIGHT_DISTINCTION: Early blight shows target-like concentric rings on older leaves. Late blight shows water-soaked lesions that turn brown/black, often starting at leaf edges, with white mold underneath in humid conditions."
+        if "septoria" in pred_lower and "bacterial" in exp_lower:
+            return "SPOT_TYPE: Septoria has small circular spots with dark borders and light centers. Bacterial spot has irregular, water-soaked spots that may coalesce."
+
+    # Pattern 5: Mold/mildew confusion
+    if "mold" in exp_lower and "blight" in pred_lower:
+        return "MOLD_VS_BLIGHT: Leaf mold shows fuzzy growth (usually on leaf undersides). Blight causes tissue death and browning. Look for fungal growth texture."
+
+    # Pattern 6: Naming convention mismatch
+    if "leaf spot" in exp_lower and "spot" in pred_lower:
+        return "NAMING_CONVENTION: Use the format '[Plant] leaf spot' (e.g., 'Bell pepper leaf spot') to match expected naming conventions."
+
+    # Pattern 7: Gray leaf spot specifics
+    if "gray leaf spot" in exp_lower and ("blight" in pred_lower or "rust" in pred_lower):
+        return "GRAY_LEAF_SPOT: Gray leaf spot shows rectangular lesions between leaf veins (especially on corn). Distinct from blight (larger irregular areas) and rust (pustules)."
+
+    # Default: general mismatch
+    return f"MISMATCH: Predicted '{predicted}' but expected '{expected}'. Review visual symptoms more carefully."
