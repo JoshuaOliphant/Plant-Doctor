@@ -27,16 +27,28 @@ class ModelProvider(str, Enum):
     CLAUDE_HAIKU = "anthropic:claude-haiku-4-5-20251001"
     CLAUDE_SONNET = "anthropic:claude-sonnet-4-5-20250929"
 
-    # OpenAI GPT models
+    # OpenAI GPT-5 family (latest)
+    GPT_5_2 = "openai:gpt-5.2"
+    GPT_5 = "openai:gpt-5"
+    GPT_5_MINI = "openai:gpt-5-mini"
+    GPT_5_NANO = "openai:gpt-5-nano"
+
+    # OpenAI GPT-4 family (legacy but still supported)
     GPT_4O = "openai:gpt-4o"
     GPT_4O_MINI = "openai:gpt-4o-mini"
     GPT_4_1 = "openai:gpt-4.1"
     GPT_4_1_MINI = "openai:gpt-4.1-mini"
     GPT_4_1_NANO = "openai:gpt-4.1-nano"
 
-    # Google Gemini models
+    # Google Gemini 3 family (latest)
+    GEMINI_3_PRO = "google-gla:gemini-3-pro-preview"
+    GEMINI_3_FLASH = "google-gla:gemini-3-flash-preview"
+
+    # Google Gemini 2 family
     GEMINI_2_FLASH = "google-gla:gemini-2.0-flash"
     GEMINI_2_PRO = "google-gla:gemini-2.0-pro-exp-02-05"
+
+    # Google Gemini 1.5 family (legacy)
     GEMINI_1_5_FLASH = "google-gla:gemini-1.5-flash"
     GEMINI_1_5_PRO = "google-gla:gemini-1.5-pro"
 
@@ -46,15 +58,29 @@ MODEL_PRICING: dict[ModelProvider, tuple[float, float]] = {
     # Claude pricing
     ModelProvider.CLAUDE_HAIKU: (1.0, 5.0),
     ModelProvider.CLAUDE_SONNET: (3.0, 15.0),
-    # OpenAI pricing (approximate)
+
+    # OpenAI GPT-5 pricing (approximate)
+    ModelProvider.GPT_5_2: (3.0, 12.0),
+    ModelProvider.GPT_5: (2.5, 10.0),
+    ModelProvider.GPT_5_MINI: (0.3, 1.2),
+    ModelProvider.GPT_5_NANO: (0.1, 0.4),
+
+    # OpenAI GPT-4 pricing (approximate)
     ModelProvider.GPT_4O: (2.5, 10.0),
     ModelProvider.GPT_4O_MINI: (0.15, 0.6),
     ModelProvider.GPT_4_1: (2.0, 8.0),
     ModelProvider.GPT_4_1_MINI: (0.4, 1.6),
     ModelProvider.GPT_4_1_NANO: (0.1, 0.4),
-    # Gemini pricing (approximate)
+
+    # Gemini 3 pricing (approximate - preview pricing)
+    ModelProvider.GEMINI_3_PRO: (1.0, 4.0),
+    ModelProvider.GEMINI_3_FLASH: (0.5, 3.0),
+
+    # Gemini 2 pricing
     ModelProvider.GEMINI_2_FLASH: (0.1, 0.4),
     ModelProvider.GEMINI_2_PRO: (1.25, 5.0),
+
+    # Gemini 1.5 pricing
     ModelProvider.GEMINI_1_5_FLASH: (0.075, 0.3),
     ModelProvider.GEMINI_1_5_PRO: (1.25, 5.0),
 }

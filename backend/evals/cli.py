@@ -64,15 +64,32 @@ async def run_multi_model_eval(args):
 
     # Parse models to evaluate
     model_map = {
+        # Claude models
         "claude-haiku": ModelProvider.CLAUDE_HAIKU,
         "claude-sonnet": ModelProvider.CLAUDE_SONNET,
+
+        # OpenAI GPT-5 family (latest)
+        "gpt-5.2": ModelProvider.GPT_5_2,
+        "gpt-5": ModelProvider.GPT_5,
+        "gpt-5-mini": ModelProvider.GPT_5_MINI,
+        "gpt-5-nano": ModelProvider.GPT_5_NANO,
+
+        # OpenAI GPT-4 family
         "gpt-4o": ModelProvider.GPT_4O,
         "gpt-4o-mini": ModelProvider.GPT_4O_MINI,
         "gpt-4.1": ModelProvider.GPT_4_1,
         "gpt-4.1-mini": ModelProvider.GPT_4_1_MINI,
         "gpt-4.1-nano": ModelProvider.GPT_4_1_NANO,
+
+        # Google Gemini 3 family (latest)
+        "gemini-3-pro": ModelProvider.GEMINI_3_PRO,
+        "gemini-3-flash": ModelProvider.GEMINI_3_FLASH,
+
+        # Google Gemini 2 family
         "gemini-2-flash": ModelProvider.GEMINI_2_FLASH,
         "gemini-2-pro": ModelProvider.GEMINI_2_PRO,
+
+        # Google Gemini 1.5 family
         "gemini-1.5-flash": ModelProvider.GEMINI_1_5_FLASH,
         "gemini-1.5-pro": ModelProvider.GEMINI_1_5_PRO,
     }
@@ -343,10 +360,12 @@ def main():
     multi_parser.add_argument(
         "--models",
         nargs="+",
-        default=["claude-sonnet", "gpt-4o", "gemini-2-flash"],
-        help="Models to compare (default: claude-sonnet gpt-4o gemini-2-flash). "
-             "Options: claude-haiku, claude-sonnet, gpt-4o, gpt-4o-mini, "
-             "gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gemini-2-flash, gemini-2-pro, "
+        default=["claude-sonnet", "gpt-5-mini", "gemini-3-flash"],
+        help="Models to compare (default: claude-sonnet gpt-5-mini gemini-3-flash). "
+             "Options: claude-haiku, claude-sonnet, "
+             "gpt-5.2, gpt-5, gpt-5-mini, gpt-5-nano, "
+             "gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, "
+             "gemini-3-pro, gemini-3-flash, gemini-2-flash, gemini-2-pro, "
              "gemini-1.5-flash, gemini-1.5-pro"
     )
     multi_parser.add_argument(
